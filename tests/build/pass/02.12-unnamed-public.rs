@@ -1,7 +1,7 @@
 mod inner {
     use ref_destruct::*;
 
-    #[ref_destruct(MyStructRef)]
+    #[ref_destruct(ref(MyStructRef))]
     pub struct MyStruct(pub i32);
 }
 

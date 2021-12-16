@@ -1,6 +1,6 @@
 use ref_destruct::*;
 
-#[ref_destruct(MyEnumRef)]
+#[ref_destruct(ref(MyEnumRef))]
 enum MyEnum {
     A,
     B,

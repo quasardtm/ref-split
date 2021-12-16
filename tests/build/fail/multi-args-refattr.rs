@@ -1,6 +1,6 @@
 use ref_destruct::*;
 
-#[ref_destruct(MyStructRef, MyStructMut)]
+#[ref_destruct(ref(MyStructRef), ref(MyStructRefDup))]
 struct MyStruct {
     x: i32,
 }

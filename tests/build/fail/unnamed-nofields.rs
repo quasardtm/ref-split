@@ -1,6 +1,6 @@
 use ref_destruct::*;
 
-#[ref_destruct(MyStructRef)]
+#[ref_destruct(ref(MyStructRef))]
 struct MyStruct();
 
 fn main() {}

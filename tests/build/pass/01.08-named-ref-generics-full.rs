@@ -1,7 +1,7 @@
 use ref_destruct::*;
 use core::convert::*;
 
-#[ref_destruct(MyStructRef)]
+#[ref_destruct(ref(MyStructRef))]
 pub struct MyStruct<'a, 'b, T, U, V>
 where
     'a: 'b,

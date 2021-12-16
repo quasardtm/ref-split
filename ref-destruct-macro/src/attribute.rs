@@ -1,28 +1,74 @@
-use proc_macro2::{Ident, TokenStream, Span};
-use quote::{quote};
-use syn::{Field, Item, ItemStruct, GenericParam, LifetimeDef, Lifetime};
+use proc_macro2::{Ident, Span, TokenStream};
+use quote::{quote, ToTokens};
+use syn::{
+    punctuated::Punctuated, token::Comma, AttributeArgs, Field, GenericParam, Item, ItemStruct,
+    Lifetime, LifetimeDef, Meta, NestedMeta,
+};
 
 pub(crate) struct Ref;
 pub(crate) struct Mut;
 
 pub(crate) trait RefMut {
+    const IDENT: &'static str;
     fn token(lifetime: Option<&Lifetime>) -> TokenStream;
 }
 impl RefMut for Ref {
+    const IDENT: &'static str = "ref";
     fn token(lifetime: Option<&Lifetime>) -> TokenStream {
         quote! { &#lifetime }
     }
 }
 impl RefMut for Mut {
+    const IDENT: &'static str = "mut";
     fn token(lifetime: Option<&Lifetime>) -> TokenStream {
         quote! { &#lifetime mut }
     }
 }
 
+pub(crate) fn proc(args: AttributeArgs, input: TokenStream) -> syn::Result<TokenStream> {
+    let mut ref_ident: Option<Ident> = None;
+    let mut mut_ident: Option<Ident> = None;
 
-pub(crate) fn proc<T: RefMut>(args: TokenStream, mut input: TokenStream) -> syn::Result<TokenStream> {
-    let input_item: Item = syn::parse2(input.clone())?;
-    let ref_ident: Ident = syn::parse2(args)?;
+    // ref_destructの引数を調べる
+    // refとmutが0か1個のみok
+    for nested_meta in args.iter() {
+        if let NestedMeta::Meta(Meta::List(list)) = nested_meta {
+            if list.path.is_ident(Ref::IDENT) {
+                if ref_ident.is_some() {
+                    return Err(syn::Error::new_spanned(list, "duplicate ref structs"));
+                }
+                ref_ident = syn::parse2(list.nested.to_token_stream())?;
+            } else if list.path.is_ident(Mut::IDENT) {
+                if mut_ident.is_some() {
+                    return Err(syn::Error::new_spanned(list, "duplicate mut structs"));
+                }
+                mut_ident = syn::parse2(list.nested.to_token_stream())?;
+            }
+        }
+    }
+
+    if ref_ident.is_none() && mut_ident.is_none() {
+        return Err(syn::Error::new_spanned(
+            input,
+            "ref-destruct requires at least 1 argument, ref(Ident), mut(Ident), or both.",
+        ));
+    }
+
+    // 元の構造体から#[rd_ignore]を除いたTokenStreamを、返却用のベースとして保存
+    let mut return_stream = into_base_stream(input.clone())?;
+    // refとmutに関して処理する
+    let input_item: Item = syn::parse2(input)?;
+    if let Some(ref_ident) = ref_ident {
+        return_stream.extend(create_token_stream::<Ref>(ref_ident, &input_item)?.into_iter());
+    }
+    if let Some(mut_ident) = mut_ident {
+        return_stream.extend(create_token_stream::<Mut>(mut_ident, &input_item)?.into_iter());
+    }
+
+    Ok(return_stream)
+}
+
+fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::Result<TokenStream> {
     match input_item {
         Item::Struct(item_struct) => {
             let ItemStruct {
@@ -35,6 +81,7 @@ pub(crate) fn proc<T: RefMut>(args: TokenStream, mut input: TokenStream) -> syn:
                 semi_token: _,
             } = item_struct;
 
+            // ジェネリクスについて整理する
             let mut ref_struct_generics = generics.clone();
             let ref_destruct_lifetime = Lifetime::new("'ref_destruct_lifetime", Span::call_site());
             for lifetime in ref_struct_generics.lifetimes_mut() {
@@ -44,22 +91,46 @@ pub(crate) fn proc<T: RefMut>(args: TokenStream, mut input: TokenStream) -> syn:
             let ref_destruct_ref_nolife = T::token(None);
             let ref_destruct_lifetime_def = LifetimeDef::new(ref_destruct_lifetime);
 
-            ref_struct_generics.params.push(GenericParam::Lifetime(ref_destruct_lifetime_def));
-            let (ref_struct_generics_impl, ref_struct_generics_type, ref_struct_generics_where) = ref_struct_generics.split_for_impl();
-            let (_struct_generics_impl, struct_generics_type, struct_generics_where) = generics.split_for_impl();
+            // ref用にはライフタイムを1つ追加する
+            ref_struct_generics
+                .params
+                .push(GenericParam::Lifetime(ref_destruct_lifetime_def));
+            let (ref_struct_generics_impl, ref_struct_generics_type, ref_struct_generics_where) =
+                ref_struct_generics.split_for_impl();
+            let (_struct_generics_impl, struct_generics_type, struct_generics_where) =
+                generics.split_for_impl();
 
             match fields {
                 syn::Fields::Named(fields_named) => {
-                    let named = fields_named.named;
-
-                    if named.is_empty() {
-                        return Err(syn::Error::new_spanned(input, "ref-destruct requires at least 1 field."));
-                    }
+                    let named = &fields_named.named;
 
                     let mut ref_struct_fields = Vec::new();
                     let mut field_to_ref_struct = Vec::new();
 
-                    for field in named {
+                    for field in named.iter().filter(|field| {
+                        !field.attrs.iter().any(|attr| {
+                            if !attr.path.is_ident("rd_ignore") {
+                                // rd_ignore属性がない
+                                false
+                            } else if let Ok(list) = attr
+                                .parse_args_with(Punctuated::<NestedMeta, Comma>::parse_terminated)
+                            {
+                                // 引数付きrd_ignore属性がある
+                                list.iter().any(|meta| {
+                                    if let NestedMeta::Meta(Meta::Path(path)) = meta {
+                                        // 属性の引数がPath
+                                        path.is_ident(T::IDENT)
+                                    } else {
+                                        // 属性の引数が対象外の形式（エラーでいいかも）
+                                        false
+                                    }
+                                })
+                            } else {
+                                // 引数なしrd_ignore属性がある
+                                true
+                            }
+                        })
+                    }) {
                         let Field {
                             ident,
                             ty,
@@ -67,9 +138,17 @@ pub(crate) fn proc<T: RefMut>(args: TokenStream, mut input: TokenStream) -> syn:
                             vis: _,
                             colon_token: _,
                         } = field;
-                        let ident = ident.unwrap();
+                        let ident = ident.as_ref().unwrap();
                         ref_struct_fields.push(quote! { pub #ident: #ref_destruct_ref #ty });
-                        field_to_ref_struct.push(quote! { #ident: #ref_destruct_ref_nolife v.#ident });
+                        field_to_ref_struct
+                            .push(quote! { #ident: #ref_destruct_ref_nolife v.#ident });
+                    }
+
+                    if ref_struct_fields.is_empty() {
+                        return Err(syn::Error::new_spanned(
+                            input_item,
+                            "ref-destruct requires at least 1 field.",
+                        ));
                     }
 
                     let ref_struct_token = quote! {
@@ -92,20 +171,42 @@ pub(crate) fn proc<T: RefMut>(args: TokenStream, mut input: TokenStream) -> syn:
                         }
                     };
 
-                    input.extend(ref_struct_token.into_iter());
-                    Ok(input)
+                    Ok(ref_struct_token)
                 }
                 syn::Fields::Unnamed(field_unnamed) => {
-                    let unnamed = field_unnamed.unnamed;
-
-                    if unnamed.is_empty() {
-                        return Err(syn::Error::new_spanned(input, "ref-destruct requires at least 1 field."));
-                    }
+                    let unnamed = &field_unnamed.unnamed;
 
                     let mut ref_struct_fields = Vec::new();
                     let mut field_to_ref_struct = Vec::new();
 
-                    for (num, field) in unnamed.into_iter().enumerate() {
+                    for (num, field) in unnamed
+                        .iter()
+                        .filter(|field| {
+                            !field.attrs.iter().any(|attr| {
+                                if !attr.path.is_ident("rd_ignore") {
+                                    // rd_ignore属性がない
+                                    false
+                                } else if let Ok(list) = attr.parse_args_with(
+                                    Punctuated::<NestedMeta, Comma>::parse_terminated,
+                                ) {
+                                    // 引数付きrd_ignore属性がある
+                                    list.iter().any(|meta| {
+                                        if let NestedMeta::Meta(Meta::Path(path)) = meta {
+                                            // 属性の引数がPath
+                                            path.is_ident(T::IDENT)
+                                        } else {
+                                            // 属性の引数が対象外の形式（エラーでいいかも）
+                                            false
+                                        }
+                                    })
+                                } else {
+                                    // 引数なしrd_ignore属性がある
+                                    true
+                                }
+                            })
+                        })
+                        .enumerate()
+                    {
                         let numidx: syn::Index = num.into();
                         let Field {
                             ident: _,
@@ -116,6 +217,13 @@ pub(crate) fn proc<T: RefMut>(args: TokenStream, mut input: TokenStream) -> syn:
                         } = field;
                         ref_struct_fields.push(quote! { pub #ref_destruct_ref #ty });
                         field_to_ref_struct.push(quote! { #ref_destruct_ref_nolife v.#numidx });
+                    }
+
+                    if ref_struct_fields.is_empty() {
+                        return Err(syn::Error::new_spanned(
+                            input_item,
+                            "ref-destruct requires at least 1 field.",
+                        ));
                     }
 
                     let ref_struct_token = quote! {
@@ -136,12 +244,48 @@ pub(crate) fn proc<T: RefMut>(args: TokenStream, mut input: TokenStream) -> syn:
                         }
                     };
 
-                    input.extend(ref_struct_token.into_iter());
-                    Ok(input)
-                },
-                syn::Fields::Unit => Err(syn::Error::new_spanned(input, "ref-destruct requires at least 1 field.")),
+                    Ok(ref_struct_token)
+                }
+                syn::Fields::Unit => Err(syn::Error::new_spanned(
+                    input_item,
+                    "ref-destruct requires at least 1 field.",
+                )),
             }
         }
-        _ => Err(syn::Error::new_spanned(input, "ref-destruct only supports struct.")),
+        _ => Err(syn::Error::new_spanned(
+            input_item,
+            "ref-destruct only supports struct.",
+        )),
     }
+}
+
+fn into_base_stream(input: TokenStream) -> syn::Result<TokenStream> {
+    let mut input_item: Item = syn::parse2(input)?;
+    match &mut input_item {
+        Item::Struct(item_struct) => match &mut item_struct.fields {
+            syn::Fields::Named(fields_named) => {
+                for field in fields_named.named.iter_mut() {
+                    field.attrs.retain(|attr| !attr.path.is_ident("rd_ignore"));
+                }
+            }
+            syn::Fields::Unnamed(field_unnamed) => {
+                for field in field_unnamed.unnamed.iter_mut() {
+                    field.attrs.retain(|attr| !attr.path.is_ident("rd_ignore"));
+                }
+            }
+            syn::Fields::Unit => {
+                return Err(syn::Error::new_spanned(
+                    input_item,
+                    "ref-destruct requires at least 1 field.",
+                ))
+            }
+        },
+        _ => {
+            return Err(syn::Error::new_spanned(
+                input_item,
+                "ref-destruct only supports struct.",
+            ))
+        }
+    };
+    Ok(input_item.into_token_stream())
 }
