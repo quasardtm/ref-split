@@ -13,3 +13,6 @@ syn = { version = "1", features = ["full"] }
 proc-macro2 = "1"
 quote = "1"
 ref-destruct-def = { path = "../ref-destruct-def" }
+
+[dev-dependencies]
+ref-destruct = { path = ".." }
