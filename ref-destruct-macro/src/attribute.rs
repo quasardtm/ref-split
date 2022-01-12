@@ -66,9 +66,23 @@ pub(crate) fn proc(args: AttributeArgs, input: TokenStream) -> syn::Result<Token
                 }
                 mut_ident = syn::parse2(list.nested.to_token_stream())?;
             } else if list.path.is_ident(RefOpt::IDENT) {
-                refopt_ident.push(syn::parse2(list.nested.to_token_stream())?);
+                for nested_meta in list.nested.iter() {
+                    if let NestedMeta::Meta(Meta::Path(path)) = nested_meta {
+                        refopt_ident.push(syn::parse2(path.to_token_stream())?);
+                    } else {
+                        return Err(syn::Error::new_spanned(nested_meta, "illegal argument"));
+                    }
+                }
+                // refopt_ident.push(syn::parse2(list.nested.to_token_stream())?);
             } else if list.path.is_ident(MutOpt::IDENT) {
-                mutopt_ident.push(syn::parse2(list.nested.to_token_stream())?);
+                for nested_meta in list.nested.iter() {
+                    if let NestedMeta::Meta(Meta::Path(path)) = nested_meta {
+                        mutopt_ident.push(syn::parse2(path.to_token_stream())?);
+                    } else {
+                        return Err(syn::Error::new_spanned(nested_meta, "illegal argument"));
+                    }
+                }
+                // mutopt_ident.push(syn::parse2(list.nested.to_token_stream())?);
             }
         }
     }
