@@ -149,13 +149,31 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
                             {
                                 // 引数付きrd_ignore属性がある
                                 list.iter().any(|meta| {
-                                    if let NestedMeta::Meta(Meta::Path(path)) = meta {
-                                        // 属性の引数がPath
-                                        path.is_ident(T::IDENT)
-                                    } else {
-                                        // 属性の引数が対象外の形式（エラーでいいかも）
-                                        false
+                                    match meta {
+                                        NestedMeta::Meta(Meta::Path(path)) => {
+                                            // 属性の引数がPath
+                                            path.is_ident(T::IDENT)
+                                        },
+                                        NestedMeta::Meta(Meta::List(list)) => {
+                                            // 属性の引数がList
+                                            // Listの引数内に対象のref_identと一致するidentが存在することを確認する
+                                            list.path.is_ident(T::IDENT) && list.nested.iter().any(|nested_meta| {
+                                                if let NestedMeta::Meta(Meta::Path(path)) = nested_meta {
+                                                    path.is_ident(&ref_ident)
+                                                } else {
+                                                    false
+                                                }
+                                            })
+                                        }
+                                        _ => false,
                                     }
+                                    // if let NestedMeta::Meta(Meta::Path(path)) = meta {
+                                    //     // 属性の引数がPath
+                                    //     path.is_ident(T::IDENT)
+                                    // } else {
+                                    //     // 属性の引数が対象外の形式（エラーでいいかも）
+                                    //     false
+                                    // }
                                 })
                             } else {
                                 // 引数なしrd_ignore属性がある
@@ -230,13 +248,31 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
                                 ) {
                                     // 引数付きrd_ignore属性がある
                                     list.iter().any(|meta| {
-                                        if let NestedMeta::Meta(Meta::Path(path)) = meta {
-                                            // 属性の引数がPath
-                                            path.is_ident(T::IDENT)
-                                        } else {
-                                            // 属性の引数が対象外の形式（エラーでいいかも）
-                                            false
+                                        match meta {
+                                            NestedMeta::Meta(Meta::Path(path)) => {
+                                                // 属性の引数がPath
+                                                path.is_ident(T::IDENT)
+                                            },
+                                            NestedMeta::Meta(Meta::List(list)) => {
+                                                // 属性の引数がList
+                                                // Listの引数内に対象のref_identと一致するidentが存在することを確認する
+                                                list.path.is_ident(T::IDENT) && list.nested.iter().any(|nested_meta| {
+                                                    if let NestedMeta::Meta(Meta::Path(path)) = nested_meta {
+                                                        path.is_ident(&ref_ident)
+                                                    } else {
+                                                        false
+                                                    }
+                                                })
+                                            }
+                                            _ => false,
                                         }
+                                        // if let NestedMeta::Meta(Meta::Path(path)) = meta {
+                                        //     // 属性の引数がPath
+                                        //     path.is_ident(T::IDENT)
+                                        // } else {
+                                        //     // 属性の引数が対象外の形式（エラーでいいかも）
+                                        //     false
+                                        // }
                                     })
                                 } else {
                                     // 引数なしrd_ignore属性がある
