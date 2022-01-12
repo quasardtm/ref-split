@@ -7,27 +7,49 @@ use syn::{
 
 pub(crate) struct Ref;
 pub(crate) struct Mut;
+pub(crate) struct RefOpt;
+pub(crate) struct MutOpt;
 
 pub(crate) trait RefMut {
     const IDENT: &'static str;
+    const IS_MAIN: bool;
     fn token(lifetime: Option<&Lifetime>) -> TokenStream;
 }
 impl RefMut for Ref {
     const IDENT: &'static str = "ref";
+    const IS_MAIN: bool = true;
     fn token(lifetime: Option<&Lifetime>) -> TokenStream {
         quote! { &#lifetime }
     }
 }
 impl RefMut for Mut {
     const IDENT: &'static str = "mut";
+    const IS_MAIN: bool = true;
+    fn token(lifetime: Option<&Lifetime>) -> TokenStream {
+        quote! { &#lifetime mut }
+    }
+}
+impl RefMut for RefOpt {
+    const IDENT: &'static str = "refopt";
+    const IS_MAIN: bool = false;
+    fn token(lifetime: Option<&Lifetime>) -> TokenStream {
+        quote! { &#lifetime }
+    }
+}
+impl RefMut for MutOpt {
+    const IDENT: &'static str = "mutopt";
+    const IS_MAIN: bool = false;
     fn token(lifetime: Option<&Lifetime>) -> TokenStream {
         quote! { &#lifetime mut }
     }
 }
 
+
 pub(crate) fn proc(args: AttributeArgs, input: TokenStream) -> syn::Result<TokenStream> {
     let mut ref_ident: Option<Ident> = None;
     let mut mut_ident: Option<Ident> = None;
+    let mut refopt_ident: Vec<Ident> = Vec::new();
+    let mut mutopt_ident: Vec<Ident> = Vec::new();
 
     // ref_destructの引数を調べる
     // refとmutが0か1個のみok
@@ -43,11 +65,15 @@ pub(crate) fn proc(args: AttributeArgs, input: TokenStream) -> syn::Result<Token
                     return Err(syn::Error::new_spanned(list, "duplicate mut structs"));
                 }
                 mut_ident = syn::parse2(list.nested.to_token_stream())?;
+            } else if list.path.is_ident(RefOpt::IDENT) {
+                refopt_ident.push(syn::parse2(list.nested.to_token_stream())?);
+            } else if list.path.is_ident(MutOpt::IDENT) {
+                mutopt_ident.push(syn::parse2(list.nested.to_token_stream())?);
             }
         }
     }
 
-    if ref_ident.is_none() && mut_ident.is_none() {
+    if ref_ident.is_none() && mut_ident.is_none() && refopt_ident.is_empty() && mutopt_ident.is_empty() {
         return Err(syn::Error::new_spanned(
             input,
             "ref-destruct requires at least 1 argument, ref(Ident), mut(Ident), or both.",
@@ -63,6 +89,12 @@ pub(crate) fn proc(args: AttributeArgs, input: TokenStream) -> syn::Result<Token
     }
     if let Some(mut_ident) = mut_ident {
         return_stream.extend(create_token_stream::<Mut>(mut_ident, &input_item)?.into_iter());
+    }
+    for refopt_ident in refopt_ident {
+        return_stream.extend(create_token_stream::<RefOpt>(refopt_ident, &input_item)?.into_iter())
+    }
+    for mutopt_ident in mutopt_ident {
+        return_stream.extend(create_token_stream::<MutOpt>(mutopt_ident, &input_item)?.into_iter())
     }
 
     Ok(return_stream)
@@ -151,7 +183,7 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
                         ));
                     }
 
-                    let ref_struct_token = quote! {
+                    let mut ref_struct_token = quote! {
                         #vis struct #ref_ident #ref_struct_generics_impl #ref_struct_generics_where {
                             #(#ref_struct_fields),*
                         }
@@ -165,11 +197,18 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
                                 }
                             }
                         }
-
-                        impl #ref_struct_generics_impl ::ref_destruct::RefDestruct for #ref_destruct_ref #ident #struct_generics_type  #struct_generics_where {
-                            type Struct = #ref_ident #ref_struct_generics_type;
-                        }
                     };
+
+                    // RefOpt, MutOptはRefDestructを実装しない
+                    if T::IS_MAIN {
+                        ref_struct_token.extend(
+                            quote! {
+                                impl #ref_struct_generics_impl ::ref_destruct::RefDestruct for #ref_destruct_ref #ident #struct_generics_type  #struct_generics_where {
+                                    type Struct = #ref_ident #ref_struct_generics_type;
+                                }
+                            }
+                        );
+                    }
 
                     Ok(ref_struct_token)
                 }
@@ -226,7 +265,7 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
                         ));
                     }
 
-                    let ref_struct_token = quote! {
+                    let mut ref_struct_token = quote! {
                         #vis struct #ref_ident #ref_struct_generics_impl (#(#ref_struct_fields),*) #ref_struct_generics_where;
 
                         impl #ref_struct_generics_impl ::core::convert::From<#ref_destruct_ref #ident #struct_generics_type> for #ref_ident #ref_struct_generics_type
@@ -238,11 +277,18 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
                                 )
                             }
                         }
-
-                        impl #ref_struct_generics_impl ::ref_destruct::RefDestruct for #ref_destruct_ref #ident #struct_generics_type  #struct_generics_where {
-                            type Struct = #ref_ident #ref_struct_generics_type;
-                        }
                     };
+
+                    // RefOpt, MutOptはRefDestructを実装しない
+                    if T::IS_MAIN {
+                        ref_struct_token.extend(
+                            quote! {
+                                impl #ref_struct_generics_impl ::ref_destruct::RefDestruct for #ref_destruct_ref #ident #struct_generics_type  #struct_generics_where {
+                                    type Struct = #ref_ident #ref_struct_generics_type;
+                                }
+                            }
+                        );
+                    }
 
                     Ok(ref_struct_token)
                 }
