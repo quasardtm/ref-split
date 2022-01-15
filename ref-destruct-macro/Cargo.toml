@@ -9,9 +9,10 @@ edition = "2021"
 proc-macro = true
 
 [dependencies]
-syn = { version = "1", features = ["full"] }
+syn = { version = "1", features = ["full", "extra-traits"] }
 proc-macro2 = "1"
 quote = "1"
+convert_case = "0.5"
 ref-destruct-def = { path = "../ref-destruct-def" }
 
 [dev-dependencies]

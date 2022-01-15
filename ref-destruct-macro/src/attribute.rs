@@ -1,5 +1,8 @@
+use std::collections::{HashMap, HashSet};
+
+use convert_case::{Case, Casing};
 use proc_macro2::{Ident, Span, TokenStream};
-use quote::{quote, ToTokens};
+use quote::{format_ident, quote, ToTokens};
 use syn::{
     punctuated::Punctuated, token::Comma, AttributeArgs, Field, GenericParam, Item, ItemStruct,
     Lifetime, LifetimeDef, Meta, NestedMeta,
@@ -44,7 +47,6 @@ impl RefMut for MutOpt {
     }
 }
 
-
 pub(crate) fn proc(args: AttributeArgs, input: TokenStream) -> syn::Result<TokenStream> {
     let mut ref_ident: Option<Ident> = None;
     let mut mut_ident: Option<Ident> = None;
@@ -73,7 +75,6 @@ pub(crate) fn proc(args: AttributeArgs, input: TokenStream) -> syn::Result<Token
                         return Err(syn::Error::new_spanned(nested_meta, "illegal argument"));
                     }
                 }
-                // refopt_ident.push(syn::parse2(list.nested.to_token_stream())?);
             } else if list.path.is_ident(MutOpt::IDENT) {
                 for nested_meta in list.nested.iter() {
                     if let NestedMeta::Meta(Meta::Path(path)) = nested_meta {
@@ -82,12 +83,15 @@ pub(crate) fn proc(args: AttributeArgs, input: TokenStream) -> syn::Result<Token
                         return Err(syn::Error::new_spanned(nested_meta, "illegal argument"));
                     }
                 }
-                // mutopt_ident.push(syn::parse2(list.nested.to_token_stream())?);
             }
         }
     }
 
-    if ref_ident.is_none() && mut_ident.is_none() && refopt_ident.is_empty() && mutopt_ident.is_empty() {
+    if ref_ident.is_none()
+        && mut_ident.is_none()
+        && refopt_ident.is_empty()
+        && mutopt_ident.is_empty()
+    {
         return Err(syn::Error::new_spanned(
             input,
             "ref-destruct requires at least 1 argument, ref(Ident), mut(Ident), or both.",
@@ -141,8 +145,7 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
             ref_struct_generics
                 .params
                 .push(GenericParam::Lifetime(ref_destruct_lifetime_def));
-            let (ref_struct_generics_impl, ref_struct_generics_type, ref_struct_generics_where) =
-                ref_struct_generics.split_for_impl();
+
             let (_struct_generics_impl, struct_generics_type, struct_generics_where) =
                 generics.split_for_impl();
 
@@ -152,6 +155,14 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
 
                     let mut ref_struct_fields = Vec::new();
                     let mut field_to_ref_struct = Vec::new();
+                    let mut types_remove: HashSet<_> = generics
+                        .type_params()
+                        .map(|param| param.ident.clone())
+                        .collect();
+                    let mut lifetimes_remove: HashSet<_> = generics
+                        .lifetimes()
+                        .map(|lifetime_def| lifetime_def.lifetime.ident.clone())
+                        .collect();
 
                     for field in named.iter().filter(|field| {
                         !field.attrs.iter().any(|attr| {
@@ -167,27 +178,23 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
                                         NestedMeta::Meta(Meta::Path(path)) => {
                                             // 属性の引数がPath
                                             path.is_ident(T::IDENT)
-                                        },
+                                        }
                                         NestedMeta::Meta(Meta::List(list)) => {
                                             // 属性の引数がList
                                             // Listの引数内に対象のref_identと一致するidentが存在することを確認する
-                                            list.path.is_ident(T::IDENT) && list.nested.iter().any(|nested_meta| {
-                                                if let NestedMeta::Meta(Meta::Path(path)) = nested_meta {
-                                                    path.is_ident(&ref_ident)
-                                                } else {
-                                                    false
-                                                }
-                                            })
+                                            list.path.is_ident(T::IDENT)
+                                                && list.nested.iter().any(|nested_meta| {
+                                                    if let NestedMeta::Meta(Meta::Path(path)) =
+                                                        nested_meta
+                                                    {
+                                                        path.is_ident(&ref_ident)
+                                                    } else {
+                                                        false
+                                                    }
+                                                })
                                         }
                                         _ => false,
                                     }
-                                    // if let NestedMeta::Meta(Meta::Path(path)) = meta {
-                                    //     // 属性の引数がPath
-                                    //     path.is_ident(T::IDENT)
-                                    // } else {
-                                    //     // 属性の引数が対象外の形式（エラーでいいかも）
-                                    //     false
-                                    // }
                                 })
                             } else {
                                 // 引数なしrd_ignore属性がある
@@ -206,6 +213,18 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
                         ref_struct_fields.push(quote! { pub #ident: #ref_destruct_ref #ty });
                         field_to_ref_struct
                             .push(quote! { #ident: #ref_destruct_ref_nolife v.#ident });
+
+                        if !types_remove.is_empty() || !lifetimes_remove.is_empty() {
+                            search_generics_type(
+                                ty,
+                                &mut |ident| {
+                                    types_remove.remove(ident);
+                                },
+                                &mut |lifetime| {
+                                    lifetimes_remove.remove(&lifetime.ident);
+                                },
+                            );
+                        }
                     }
 
                     if ref_struct_fields.is_empty() {
@@ -215,13 +234,136 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
                         ));
                     }
 
+                    // ref_struct_genericsからいらない型引数を削除
+                    let ref_struct_generics_base = ref_struct_generics.clone();
+                    // paramのboundsとwhere句の中に、削除予定の型引数があるかチェックする
+                    // ある場合は、PhantomDataをフィールドに追加する
+                    // ない場合は、予定通り型引数を削除
+                    let mut phantom_types = Vec::new();
+                    let mut phantom_lifetimes = Vec::new();
+                    undelete_required_types(
+                        generics,
+                        &mut types_remove,
+                        &mut lifetimes_remove,
+                        &mut phantom_types,
+                        &mut phantom_lifetimes,
+                    );
+                    ref_struct_generics.params =
+                        Punctuated::from_iter(ref_struct_generics.params.into_iter().filter(
+                            |param| match param {
+                                GenericParam::Type(type_param) => {
+                                    !types_remove.contains(&type_param.ident)
+                                }
+                                GenericParam::Lifetime(lifetime_def) => {
+                                    !lifetimes_remove.contains(&lifetime_def.lifetime.ident)
+                                }
+                                GenericParam::Const(_) => true,
+                            },
+                        ));
+
+                    if let Some(mut where_clause) = ref_struct_generics.where_clause.take() {
+                        where_clause.predicates = Punctuated::from_iter(
+                            where_clause.predicates.into_iter().filter(
+                                |predicate| match predicate {
+                                    syn::WherePredicate::Type(predicate_type) => {
+                                        let mut is_required = true;
+                                        let is_required_pt: *mut _ = &mut is_required;
+                                        search_generics_type(
+                                            &predicate_type.bounded_ty,
+                                            &mut |ident| {
+                                                if is_required && types_remove.contains(ident) {
+                                                    *(unsafe { &mut *is_required_pt }) = false;
+                                                }
+                                            },
+                                            &mut |lifetime| {
+                                                if is_required
+                                                    && lifetimes_remove.contains(&lifetime.ident)
+                                                {
+                                                    *(unsafe { &mut *is_required_pt }) = false;
+                                                }
+                                            },
+                                        );
+                                        is_required
+                                    }
+                                    syn::WherePredicate::Lifetime(predicate_lifetime) => {
+                                        !lifetimes_remove
+                                            .contains(&predicate_lifetime.lifetime.ident)
+                                    }
+                                    syn::WherePredicate::Eq(_) => true,
+                                },
+                            ),
+                        );
+
+                        ref_struct_generics.where_clause = if where_clause.predicates.is_empty() {
+                            None
+                        } else {
+                            Some(where_clause)
+                        }
+                    }
+                    ref_struct_fields.extend(phantom_types.iter().map(|ident_token| {
+                        let ident_token_snake = Ident::new(
+                            &ident_token.to_string().to_case(Case::Snake),
+                            Span::call_site(),
+                        );
+                        let name = format_ident!(
+                            "__ref_destruct_phantom_data_for_type_{}",
+                            ident_token_snake
+                        );
+                        quote!(#name: ::core::marker::PhantomData<#ident_token>)
+                    }));
+                    field_to_ref_struct.extend(phantom_types.iter().map(|ident_token| {
+                        let ident_token_snake = Ident::new(
+                            &ident_token.to_string().to_case(Case::Snake),
+                            Span::call_site(),
+                        );
+                        let name = format_ident!(
+                            "__ref_destruct_phantom_data_for_type_{}",
+                            ident_token_snake
+                        );
+                        quote!(#name: ::core::marker::PhantomData)
+                    }));
+                    ref_struct_fields.extend(phantom_lifetimes.iter().map(|ident_token| {
+                        let ident_token_snake = Ident::new(
+                            &ident_token.to_string().to_case(Case::Snake),
+                            Span::call_site(),
+                        );
+                        let name = format_ident!(
+                            "__ref_destruct_phantom_data_for_lifetime_{}",
+                            ident_token_snake
+                        );
+                        let lifetime = Lifetime::new(
+                            &("'".to_string() + &ident_token.to_string()),
+                            Span::call_site(),
+                        );
+                        quote!(#name: ::core::marker::PhantomData<&#lifetime ()>)
+                    }));
+                    field_to_ref_struct.extend(phantom_lifetimes.iter().map(|ident_token| {
+                        let ident_token_snake = Ident::new(
+                            &ident_token.to_string().to_case(Case::Snake),
+                            Span::call_site(),
+                        );
+                        let name = format_ident!(
+                            "__ref_destruct_phantom_data_for_lifetime_{}",
+                            ident_token_snake
+                        );
+                        quote!(#name: ::core::marker::PhantomData)
+                    }));
+
+                    let (
+                        ref_struct_generics_impl,
+                        ref_struct_generics_type,
+                        ref_struct_generics_where,
+                    ) = ref_struct_generics.split_for_impl();
+                    let (ref_struct_generics_trait_impl, _, ref_struct_generics_trait_where) =
+                        ref_struct_generics_base.split_for_impl();
+
                     let mut ref_struct_token = quote! {
                         #vis struct #ref_ident #ref_struct_generics_impl #ref_struct_generics_where {
                             #(#ref_struct_fields),*
                         }
 
-                        impl #ref_struct_generics_impl ::core::convert::From<#ref_destruct_ref #ident #struct_generics_type> for #ref_ident #ref_struct_generics_type
-                        #ref_struct_generics_where
+                        impl #ref_struct_generics_trait_impl ::core::convert::From<#ref_destruct_ref #ident #struct_generics_type> for #ref_ident #ref_struct_generics_type
+                        #ref_struct_generics_trait_where
                         {
                             fn from(v: #ref_destruct_ref #ident #struct_generics_type) -> Self {
                                 #ref_ident {
@@ -235,13 +377,12 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
                     if T::IS_MAIN {
                         ref_struct_token.extend(
                             quote! {
-                                impl #ref_struct_generics_impl ::ref_destruct::RefDestruct for #ref_destruct_ref #ident #struct_generics_type  #struct_generics_where {
+                                impl #ref_struct_generics_trait_impl ::ref_destruct::RefDestruct for #ref_destruct_ref #ident #struct_generics_type  #struct_generics_where {
                                     type Struct = #ref_ident #ref_struct_generics_type;
                                 }
                             }
                         );
                     }
-
                     Ok(ref_struct_token)
                 }
                 syn::Fields::Unnamed(field_unnamed) => {
@@ -249,53 +390,53 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
 
                     let mut ref_struct_fields = Vec::new();
                     let mut field_to_ref_struct = Vec::new();
+                    let mut types_remove: HashSet<_> = generics
+                        .type_params()
+                        .map(|param| param.ident.clone())
+                        .collect();
+                    let mut lifetimes_remove: HashSet<_> = generics
+                        .lifetimes()
+                        .map(|lifetime_def| lifetime_def.lifetime.ident.clone())
+                        .collect();
 
-                    for (num, field) in unnamed
-                        .iter()
-                        .filter(|field| {
-                            !field.attrs.iter().any(|attr| {
-                                if !attr.path.is_ident("rd_ignore") {
-                                    // rd_ignore属性がない
-                                    false
-                                } else if let Ok(list) = attr.parse_args_with(
-                                    Punctuated::<NestedMeta, Comma>::parse_terminated,
-                                ) {
-                                    // 引数付きrd_ignore属性がある
-                                    list.iter().any(|meta| {
-                                        match meta {
-                                            NestedMeta::Meta(Meta::Path(path)) => {
-                                                // 属性の引数がPath
-                                                path.is_ident(T::IDENT)
-                                            },
-                                            NestedMeta::Meta(Meta::List(list)) => {
-                                                // 属性の引数がList
-                                                // Listの引数内に対象のref_identと一致するidentが存在することを確認する
-                                                list.path.is_ident(T::IDENT) && list.nested.iter().any(|nested_meta| {
-                                                    if let NestedMeta::Meta(Meta::Path(path)) = nested_meta {
+                    for (num, field) in unnamed.iter().enumerate().filter(|(_, field)| {
+                        !field.attrs.iter().any(|attr| {
+                            if !attr.path.is_ident("rd_ignore") {
+                                // rd_ignore属性がない
+                                false
+                            } else if let Ok(list) = attr
+                                .parse_args_with(Punctuated::<NestedMeta, Comma>::parse_terminated)
+                            {
+                                // 引数付きrd_ignore属性がある
+                                list.iter().any(|meta| {
+                                    match meta {
+                                        NestedMeta::Meta(Meta::Path(path)) => {
+                                            // 属性の引数がPath
+                                            path.is_ident(T::IDENT)
+                                        }
+                                        NestedMeta::Meta(Meta::List(list)) => {
+                                            // 属性の引数がList
+                                            // Listの引数内に対象のref_identと一致するidentが存在することを確認する
+                                            list.path.is_ident(T::IDENT)
+                                                && list.nested.iter().any(|nested_meta| {
+                                                    if let NestedMeta::Meta(Meta::Path(path)) =
+                                                        nested_meta
+                                                    {
                                                         path.is_ident(&ref_ident)
                                                     } else {
                                                         false
                                                     }
                                                 })
-                                            }
-                                            _ => false,
                                         }
-                                        // if let NestedMeta::Meta(Meta::Path(path)) = meta {
-                                        //     // 属性の引数がPath
-                                        //     path.is_ident(T::IDENT)
-                                        // } else {
-                                        //     // 属性の引数が対象外の形式（エラーでいいかも）
-                                        //     false
-                                        // }
-                                    })
-                                } else {
-                                    // 引数なしrd_ignore属性がある
-                                    true
-                                }
-                            })
+                                        _ => false,
+                                    }
+                                })
+                            } else {
+                                // 引数なしrd_ignore属性がある
+                                true
+                            }
                         })
-                        .enumerate()
-                    {
+                    }) {
                         let numidx: syn::Index = num.into();
                         let Field {
                             ident: _,
@@ -306,6 +447,18 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
                         } = field;
                         ref_struct_fields.push(quote! { pub #ref_destruct_ref #ty });
                         field_to_ref_struct.push(quote! { #ref_destruct_ref_nolife v.#numidx });
+
+                        if !types_remove.is_empty() || !lifetimes_remove.is_empty() {
+                            search_generics_type(
+                                ty,
+                                &mut |ident| {
+                                    types_remove.remove(ident);
+                                },
+                                &mut |lifetime| {
+                                    lifetimes_remove.remove(&lifetime.ident);
+                                },
+                            );
+                        }
                     }
 
                     if ref_struct_fields.is_empty() {
@@ -315,11 +468,105 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
                         ));
                     }
 
+                    // ref_struct_genericsからいらない型引数を削除
+                    let ref_struct_generics_base = ref_struct_generics.clone();
+
+                    let mut phantom_types = Vec::new();
+                    let mut phantom_lifetimes = Vec::new();
+                    undelete_required_types(
+                        generics,
+                        &mut types_remove,
+                        &mut lifetimes_remove,
+                        &mut phantom_types,
+                        &mut phantom_lifetimes,
+                    );
+                    ref_struct_generics.params =
+                        Punctuated::from_iter(ref_struct_generics.params.into_iter().filter(
+                            |param| match param {
+                                GenericParam::Type(type_param) => {
+                                    !types_remove.contains(&type_param.ident)
+                                }
+                                GenericParam::Lifetime(lifetime_def) => {
+                                    !lifetimes_remove.contains(&lifetime_def.lifetime.ident)
+                                }
+                                GenericParam::Const(_) => true,
+                            },
+                        ));
+                    if let Some(mut where_clause) = ref_struct_generics.where_clause.take() {
+                        where_clause.predicates = Punctuated::from_iter(
+                            where_clause.predicates.into_iter().filter(
+                                |predicate| match predicate {
+                                    syn::WherePredicate::Type(predicate_type) => {
+                                        let mut is_required = true;
+                                        let is_required_pt: *mut _ = &mut is_required;
+                                        search_generics_type(
+                                            &predicate_type.bounded_ty,
+                                            &mut |ident| {
+                                                if is_required && types_remove.contains(ident) {
+                                                    *(unsafe { &mut *is_required_pt }) = false;
+                                                }
+                                            },
+                                            &mut |lifetime| {
+                                                if is_required
+                                                    && lifetimes_remove.contains(&lifetime.ident)
+                                                {
+                                                    *(unsafe { &mut *is_required_pt }) = false;
+                                                }
+                                            },
+                                        );
+                                        is_required
+                                    }
+                                    syn::WherePredicate::Lifetime(predicate_lifetime) => {
+                                        !lifetimes_remove
+                                            .contains(&predicate_lifetime.lifetime.ident)
+                                    }
+                                    syn::WherePredicate::Eq(_) => true,
+                                },
+                            ),
+                        );
+                        ref_struct_generics.where_clause = if where_clause.predicates.is_empty() {
+                            None
+                        } else {
+                            Some(where_clause)
+                        }
+                    }
+
+                    ref_struct_fields.extend(
+                        phantom_types
+                            .iter()
+                            .map(|ident_token| quote!(::core::marker::PhantomData<#ident_token>)),
+                    );
+                    field_to_ref_struct.extend(
+                        phantom_types
+                            .iter()
+                            .map(|_| quote!(::core::marker::PhantomData)),
+                    );
+                    ref_struct_fields.extend(phantom_lifetimes.iter().map(|ident_token| {
+                        let lifetime = Lifetime::new(
+                            &("'".to_string() + &ident_token.to_string()),
+                            Span::call_site(),
+                        );
+                        quote!(::core::marker::PhantomData<&#lifetime ()>)
+                    }));
+                    field_to_ref_struct.extend(
+                        phantom_lifetimes
+                            .iter()
+                            .map(|_| quote!(::core::marker::PhantomData)),
+                    );
+
+                    let (
+                        ref_struct_generics_impl,
+                        ref_struct_generics_type,
+                        ref_struct_generics_where,
+                    ) = ref_struct_generics.split_for_impl();
+                    let (ref_struct_generics_trait_impl, _, ref_struct_generics_trait_where) =
+                        ref_struct_generics_base.split_for_impl();
+
                     let mut ref_struct_token = quote! {
                         #vis struct #ref_ident #ref_struct_generics_impl (#(#ref_struct_fields),*) #ref_struct_generics_where;
 
-                        impl #ref_struct_generics_impl ::core::convert::From<#ref_destruct_ref #ident #struct_generics_type> for #ref_ident #ref_struct_generics_type
-                        #ref_struct_generics_where
+                        impl #ref_struct_generics_trait_impl ::core::convert::From<#ref_destruct_ref #ident #struct_generics_type> for #ref_ident #ref_struct_generics_type
+                        #ref_struct_generics_trait_where
                         {
                             fn from(v: #ref_destruct_ref #ident #struct_generics_type) -> Self {
                                 #ref_ident (
@@ -333,7 +580,7 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
                     if T::IS_MAIN {
                         ref_struct_token.extend(
                             quote! {
-                                impl #ref_struct_generics_impl ::ref_destruct::RefDestruct for #ref_destruct_ref #ident #struct_generics_type  #struct_generics_where {
+                                impl #ref_struct_generics_trait_impl ::ref_destruct::RefDestruct for #ref_destruct_ref #ident #struct_generics_type  #struct_generics_where {
                                     type Struct = #ref_ident #ref_struct_generics_type;
                                 }
                             }
@@ -384,4 +631,348 @@ fn into_base_stream(input: TokenStream) -> syn::Result<TokenStream> {
         }
     };
     Ok(input_item.into_token_stream())
+}
+
+fn search_generics_type<FT, FL>(ty: &syn::Type, ft: &mut FT, fl: &mut FL)
+where
+    FT: FnMut(&Ident),
+    FL: FnMut(&Lifetime),
+{
+    match ty {
+        syn::Type::Array(array) => search_generics_type(&array.elem, ft, fl),
+        syn::Type::BareFn(bare_fn) => {
+            // BareFn自身のライフタイムを処理
+            if let Some(lifetimes) = &bare_fn.lifetimes {
+                for lifetime in lifetimes.lifetimes.iter() {
+                    fl(&lifetime.lifetime)
+                }
+            }
+            // BareFnのパラメータを処理
+            for arg in &bare_fn.inputs {
+                search_generics_type(&arg.ty, ft, fl)
+            }
+            // 戻り値を処理
+            if let syn::ReturnType::Type(_, ty) = &bare_fn.output {
+                search_generics_type(ty, ft, fl)
+            }
+        }
+        syn::Type::Group(group) => search_generics_type(&group.elem, ft, fl),
+        syn::Type::ImplTrait(impl_trait) => {
+            for bound in &impl_trait.bounds {
+                match bound {
+                    syn::TypeParamBound::Trait(trait_bound) => {
+                        // bound lifetimeは無視
+                        // このパスはそのまま渡していい？
+                        // pathからbound lifetimeを削除しないとだめ？
+                        search_generics_path(&trait_bound.path, ft, fl)
+                    }
+                    syn::TypeParamBound::Lifetime(lifetime) => fl(lifetime),
+                }
+            }
+        }
+        syn::Type::Infer(_) => {
+            // inferはどうしようもないので、無視
+            // おそらく問題ない
+        }
+        syn::Type::Macro(_) => {
+            // 無視
+        }
+        syn::Type::Never(_) => {
+            // 無視
+        }
+        syn::Type::Paren(paren) => {
+            // parenってなに？
+            // パラメータ一つのタプル？
+            search_generics_type(&paren.elem, ft, fl)
+        }
+        syn::Type::Path(path) => {
+            if let Some(qself) = &path.qself {
+                search_generics_type(&qself.ty, ft, fl)
+            }
+            search_generics_path(&path.path, ft, fl)
+        }
+        syn::Type::Ptr(ptr) => {
+            // ポインタ
+            search_generics_type(&ptr.elem, ft, fl)
+        }
+        syn::Type::Reference(reference) => {
+            // 参照
+            if let Some(lifetime) = &reference.lifetime {
+                fl(lifetime)
+            }
+            search_generics_type(&reference.elem, ft, fl)
+        }
+        syn::Type::Slice(slice) => search_generics_type(&slice.elem, ft, fl),
+        syn::Type::TraitObject(trait_object) => {
+            // トレイトオブジェクト
+            for param_bound in &trait_object.bounds {
+                match param_bound {
+                    syn::TypeParamBound::Trait(trait_bound) => {
+                        // bound lifetimeは無視
+                        // このパスはそのまま渡していい？
+                        // pathからbound lifetimeを削除しないとだめ？
+                        search_generics_path(&trait_bound.path, ft, fl)
+                    }
+                    syn::TypeParamBound::Lifetime(lifetime) => fl(lifetime),
+                }
+            }
+        }
+        syn::Type::Tuple(tuple) => {
+            for ty in &tuple.elems {
+                search_generics_type(ty, ft, fl)
+            }
+        }
+        syn::Type::Verbatim(_) => {
+            // 対象外
+        }
+        _ => {
+            // syn内部用
+            // 無視
+        }
+    };
+}
+
+fn search_generics_path<FT, FL>(path: &syn::Path, ft: &mut FT, fl: &mut FL)
+where
+    FT: FnMut(&Ident),
+    FL: FnMut(&Lifetime),
+{
+    if let Some(ident) = path.get_ident() {
+        // 型単体
+        ft(ident)
+    } else {
+        // 型単体以外
+        // 単体以外はジェネリック型引数が素直にパスに出現することはない…はず
+        for seg in &path.segments {
+            // identは無視
+            match &seg.arguments {
+                syn::PathArguments::None => {
+                    // 無視
+                }
+                syn::PathArguments::AngleBracketed(generic_args) => {
+                    // 通常のジェネリクス
+                    for arg in &generic_args.args {
+                        match arg {
+                            syn::GenericArgument::Lifetime(lifetime) => fl(lifetime),
+                            syn::GenericArgument::Type(ty) => search_generics_type(ty, ft, fl),
+                            syn::GenericArgument::Binding(binding) => {
+                                // 関連型のバインド
+                                // identは関連型なので無視…でいいはず
+                                search_generics_type(&binding.ty, ft, fl)
+                            }
+                            syn::GenericArgument::Constraint(constraint) => {
+                                // 関連型のトレイト境界（フィールドで発生する？）
+                                // 実装保留
+                                for param_bound in &constraint.bounds {
+                                    match param_bound {
+                                        syn::TypeParamBound::Trait(trait_bound) => {
+                                            // bound lifetimeは無視
+                                            // このパスはそのまま渡していい？
+                                            // pathからbound lifetimeを削除しないとだめ？
+                                            search_generics_path(&trait_bound.path, ft, fl)
+                                        }
+                                        syn::TypeParamBound::Lifetime(lifetime) => fl(lifetime),
+                                    }
+                                }
+                            }
+                            syn::GenericArgument::Const(_) => {
+                                // 定数
+                                // 無視
+                            }
+                        }
+                    }
+                }
+                syn::PathArguments::Parenthesized(generic_args) => {
+                    // クロージャや関数ポインタのようなジェネリック
+                    for ty in &generic_args.inputs {
+                        search_generics_type(ty, ft, fl)
+                    }
+                    if let syn::ReturnType::Type(_, ty) = &generic_args.output {
+                        search_generics_type(ty, ft, fl)
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn undelete_required_types(
+    generics: &syn::Generics,
+    types_remove: &mut HashSet<Ident>,
+    lifetimes_remove: &mut HashSet<Ident>,
+    phantom_types: &mut Vec<Ident>,
+    phantom_lifetimes: &mut Vec<Ident>,
+) {
+    #[derive(Hash, PartialEq, Eq, Clone, Debug)]
+    enum IdentType {
+        Type(Ident),
+        Lifetime(Ident),
+    }
+    let mut required_types: HashMap<_, _> = generics
+        .type_params()
+        .map(|param| (param.ident.clone(), HashSet::<IdentType>::new()))
+        .collect();
+    let mut required_lifetimes: HashMap<_, _> = generics
+        .lifetimes()
+        .map(|lifetime_def| {
+            (
+                lifetime_def.lifetime.ident.clone(),
+                HashSet::<IdentType>::new(),
+            )
+        })
+        .collect();
+
+    // 型引数の依存関係を整理する
+    // required_???の値のHashSetが、HashMapのキーが依存されている型引数
+    // 値が空ではない型引数は、削除できないのでPhantomDataに型を保存する
+
+    // 型引数のboundsについて
+    for param in generics.params.iter() {
+        match param {
+            GenericParam::Type(type_param) => {
+                for bound in &type_param.bounds {
+                    match bound {
+                        syn::TypeParamBound::Trait(trait_bound) => search_generics_path(
+                            &trait_bound.path,
+                            &mut |ident| {
+                                if let Some(hs) = required_types.get_mut(ident) {
+                                    hs.insert(IdentType::Type(type_param.ident.clone()));
+                                }
+                            },
+                            &mut |lifetime| {
+                                if let Some(hs) = required_lifetimes.get_mut(&lifetime.ident) {
+                                    hs.insert(IdentType::Type(type_param.ident.clone()));
+                                }
+                            },
+                        ),
+                        syn::TypeParamBound::Lifetime(lifetime) => {
+                            if let Some(hs) = required_lifetimes.get_mut(&lifetime.ident) {
+                                hs.insert(IdentType::Type(type_param.ident.clone()));
+                            }
+                        }
+                    }
+                }
+            }
+            GenericParam::Lifetime(lifetime_def) => {
+                for lifetime in &lifetime_def.bounds {
+                    if let Some(hs) = required_lifetimes.get_mut(&lifetime.ident) {
+                        hs.insert(IdentType::Lifetime(lifetime_def.lifetime.ident.clone()));
+                    }
+                }
+            }
+            GenericParam::Const(_) => (),
+        }
+    }
+
+    // where句のboundsについて
+    if let Some(where_clause) = &generics.where_clause {
+        for predicate in &where_clause.predicates {
+            match predicate {
+                syn::WherePredicate::Type(predicate_type) => {
+                    let mut predicated_idents = Vec::<IdentType>::new();
+                    // ライフタイムの問題でFnMutで変更できない。search_generics_type内での使用は安全なので*mutにキャストする
+                    let predicated_idents_pt: *mut _ = &mut predicated_idents;
+                    search_generics_type(
+                        &predicate_type.bounded_ty,
+                        &mut |ident| {
+                            if required_types.contains_key(ident) {
+                                unsafe { &mut *predicated_idents_pt }
+                                    .push(IdentType::Type(ident.clone()));
+                            }
+                        },
+                        &mut |lifetime| {
+                            if required_lifetimes.contains_key(&lifetime.ident) {
+                                unsafe { &mut *predicated_idents_pt }
+                                    .push(IdentType::Lifetime(lifetime.ident.clone()));
+                            }
+                        },
+                    );
+                    for bound in &predicate_type.bounds {
+                        match bound {
+                            syn::TypeParamBound::Trait(trait_bound) => search_generics_path(
+                                &trait_bound.path,
+                                &mut |ident| {
+                                    if let Some(hs) = required_types.get_mut(ident) {
+                                        hs.extend(predicated_idents.iter().cloned());
+                                    }
+                                },
+                                &mut |lifetime| {
+                                    if let Some(hs) = required_lifetimes.get_mut(&lifetime.ident) {
+                                        hs.extend(predicated_idents.iter().cloned());
+                                    }
+                                },
+                            ),
+                            syn::TypeParamBound::Lifetime(lifetime) => {
+                                if let Some(hs) = required_lifetimes.get_mut(&lifetime.ident) {
+                                    hs.extend(predicated_idents.iter().cloned());
+                                }
+                            }
+                        }
+                    }
+                }
+                syn::WherePredicate::Lifetime(predicate_lifetime) => {
+                    for lifetime in &predicate_lifetime.bounds {
+                        if let Some(hs) = required_lifetimes.get_mut(&lifetime.ident) {
+                            hs.insert(IdentType::Lifetime(
+                                predicate_lifetime.lifetime.ident.clone(),
+                            ));
+                        }
+                    }
+                }
+                syn::WherePredicate::Eq(_) => (),
+            }
+        }
+    }
+
+    loop {
+        let count = phantom_types.len();
+        *types_remove = types_remove
+            .iter()
+            .cloned()
+            .filter(|ident| {
+                if required_types[ident]
+                    .iter()
+                    .any(|ident_type| match &ident_type {
+                        IdentType::Type(ident) => !types_remove.contains(ident),
+                        IdentType::Lifetime(ident) => !lifetimes_remove.contains(ident),
+                    })
+                {
+                    phantom_types.push(ident.clone());
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect();
+
+        if count != phantom_types.len() {
+            continue;
+        }
+
+        let count = phantom_lifetimes.len();
+
+        *lifetimes_remove = lifetimes_remove
+            .iter()
+            .cloned()
+            .filter(|ident| {
+                if required_lifetimes[ident]
+                    .iter()
+                    .any(|ident_type| match &ident_type {
+                        IdentType::Type(ident) => !types_remove.contains(ident),
+                        IdentType::Lifetime(ident) => !lifetimes_remove.contains(ident),
+                    })
+                {
+                    phantom_lifetimes.push(ident.clone());
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect();
+
+        // typeとlifetimeの両方の更新対象がなくなるまで続ける
+        if count == phantom_lifetimes.len() {
+            break;
+        }
+    }
 }
