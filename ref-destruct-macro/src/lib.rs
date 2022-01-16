@@ -136,6 +136,9 @@ mod attribute;
 ///     fn print(&self) { println!("{}", self.y) }
 /// }
 /// ```
+/// 
+/// # TODO
+/// - 現在、Self型の使用が出来ないので、対応する。
 #[proc_macro_attribute]
 pub fn ref_destruct(args: TokenStream, input: TokenStream) -> TokenStream {
     let args = parse_macro_input!(args as AttributeArgs);
