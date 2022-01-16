@@ -94,7 +94,7 @@ pub(crate) fn proc(args: AttributeArgs, input: TokenStream) -> syn::Result<Token
     {
         return Err(syn::Error::new_spanned(
             input,
-            "ref-destruct requires at least 1 argument, ref(Ident), mut(Ident), or both.",
+            "ref-destruct requires at least 1 argument, ref(Ident), mut(Ident), refopt(Ident), or mutopt(Ident).",
         ));
     }
 

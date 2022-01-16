@@ -56,6 +56,17 @@ mod attribute;
 /// ```
 /// 引数`ref(StructIdent)`で、不変な参照からのFromが定義され、引数`mut(StructIdent)`で、可変な参照からのFromが定義される。
 /// 
+/// `RefDestruct`が1つしか実装できないため、`ref`,`mut`は、型一つしか指定できない。
+/// 引数`refopt(StructIdent, StructIdent2, ...)`, `refmut(StructIdent, StructIdent2, ...)`を指定すると、`RefDestruct`の実装を省略する。この場合は複数定義が可能となる。
+/// ```rust
+/// use ref_destruct::ref_destruct;
+/// #[ref_destruct(ref(MyStructRef), mut(MyStructMut), refopt(MyStructRefopt, MyStructRefopt2), mutopt(MyStructMutopt, MyStructMutopt2))]
+/// struct MyStruct {
+///     x: usize,
+///     y: usize,
+/// }
+/// ```
+/// 
 /// `#[ref_destruct]`への引数は省略できず、必ず`ref`か`mut`のどちらか1つが必要となる。
 /// `ref`や`mut`の引数も省略できない。
 /// 
