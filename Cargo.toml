@@ -1,5 +1,5 @@
 [package]
-name = "ref-destruct"
+name = "ref-split"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,13 +7,13 @@ edition = "2021"
 
 [workspace]
 members = [
-    "ref-destruct-macro",
-    "ref-destruct-def",
+    "ref-split-macro",
+    "ref-split-def",
 ]
 
 [dependencies]
-ref-destruct-macro = { path = "ref-destruct-macro" }
-ref-destruct-def = { path = "ref-destruct-def" }
+ref-split-macro = { path = "ref-split-macro" }
+ref-split-def = { path = "ref-split-def" }
 
 [dev-dependencies]
 trybuild = "1.0"

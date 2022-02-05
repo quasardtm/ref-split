@@ -1,6 +1,6 @@
-use ref_destruct::*;
+use ref_split::*;
 
-#[ref_destruct(ref(MyEnumRef))]
+#[ref_split(ref(MyEnumRef))]
 enum MyEnum {
     A,
     B,

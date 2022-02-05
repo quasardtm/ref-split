@@ -1,6 +1,6 @@
-use ref_destruct::*;
+use ref_split::*;
 
-#[ref_destruct(ref(MyStructRef), mut(MyStructMut))]
+#[ref_split(ref(MyStructRef), mut(MyStructMut))]
 struct MyStruct<'a, 'b, T, U, V: core::fmt::Display + core::fmt::Debug>(&'a T, &'b mut U, &'static V)
 where
     U: Default + core::fmt::Debug,
@@ -18,13 +18,13 @@ fn into_ref_struct() {
 }
 
 #[test]
-fn destruct_to_ref_struct() {
+fn split_to_ref_struct() {
     let x = 1i32;
     let mut y = 2u32;
     let z = "test";
 
     let a = MyStruct(&x, &mut y, z);
-    let ref_struct = a.destruct();
+    let ref_struct = a.split();
     assert_eq!(&a.0, ref_struct.0);
 }
 
@@ -42,13 +42,13 @@ fn into_mut_struct() {
 }
 
 #[test]
-fn destruct_to_mut_struct() {
+fn split_to_mut_struct() {
     let x = 1i32;
     let mut y = 2u32;
     let z = "test";
 
     let mut a = MyStruct(&x, &mut y, z);
-    let ref_struct = (&mut a).destruct();
+    let ref_struct = (&mut a).split();
     assert_eq!(**ref_struct.1, 2);
     **ref_struct.1 += 10;
     assert_eq!(*a.1, 12);

@@ -1,10 +1,10 @@
-use ref_destruct::*;
+use ref_split::*;
 
-#[ref_destruct(ref(MyStructRef), mut(MyStructMut))]
+#[ref_split(ref(MyStructRef), mut(MyStructMut))]
 struct MyStruct {
-    #[rd_ignore]
+    #[rs_ignore]
     x: i32,
-    #[rd_ignore]
+    #[rs_ignore]
     y: u32,
 }
 

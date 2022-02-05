@@ -1,11 +1,11 @@
 mod gen1 {
     use std::ops::Add;
 
-    use ref_destruct::*;
+    use ref_split::*;
 
-    #[ref_destruct(ref(MyStructRef))]
+    #[ref_split(ref(MyStructRef))]
     struct MyStruct<'a, X, Y, Z>(
-        #[rd_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
+        #[rs_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
         Box<dyn for<'b> Fn(&'b X, &'a Y) -> &'b X + Send + Sync>,
         Box<dyn Iterator<Item = (Y, Z)> + 'a>,
         Box<dyn Add<Z, Output = X>>,
@@ -15,12 +15,12 @@ mod gen1 {
 mod gen2 {
     use std::ops::Add;
 
-    use ref_destruct::*;
+    use ref_split::*;
 
-    #[ref_destruct(ref(MyStructRef))]
+    #[ref_split(ref(MyStructRef))]
     struct MyStruct<'a, X, Y, Z>(
         Box<dyn for<'b> Fn(&'b X, &'a Y) -> &'b X + Send + Sync>,
-        #[rd_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
+        #[rs_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
         Box<dyn Iterator<Item = (Y, Z)> + 'a>,
         Box<dyn Add<Z, Output = X>>,
     );
@@ -29,13 +29,13 @@ mod gen2 {
 mod gen3 {
     use std::ops::Add;
 
-    use ref_destruct::*;
+    use ref_split::*;
 
-    #[ref_destruct(ref(MyStructRef))]
+    #[ref_split(ref(MyStructRef))]
     struct MyStruct<'a, X, Y, Z>(
         Box<dyn for<'b> Fn(&'b X, &'a Y) -> &'b X + Send + Sync>,
         Box<dyn Iterator<Item = (Y, Z)> + 'a>,
-        #[rd_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
+        #[rs_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
         Box<dyn Add<Z, Output = X>>,
     );
 }
@@ -43,13 +43,13 @@ mod gen3 {
 mod gen4 {
     use std::ops::Add;
 
-    use ref_destruct::*;
+    use ref_split::*;
 
-    #[ref_destruct(ref(MyStructRef))]
+    #[ref_split(ref(MyStructRef))]
     struct MyStruct<'a, X, Y, Z>(
-        #[rd_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
+        #[rs_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
         Box<dyn for<'b> Fn(&'b X, &'a Y) -> &'b X + Send + Sync>,
-        #[rd_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
+        #[rs_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
         Box<dyn Iterator<Item = (Y, Z)> + 'a>,
         Box<dyn Add<Z, Output = X>>,
     );
@@ -58,14 +58,14 @@ mod gen4 {
 mod gen5 {
     use std::ops::Add;
 
-    use ref_destruct::*;
+    use ref_split::*;
 
-    #[ref_destruct(ref(MyStructRef))]
+    #[ref_split(ref(MyStructRef))]
     struct MyStruct<'a, X, Y, Z>(
-        #[rd_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
+        #[rs_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
         Box<dyn for<'b> Fn(&'b X, &'a Y) -> &'b X + Send + Sync>,
         Box<dyn Iterator<Item = (Y, Z)> + 'a>,
-        #[rd_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
+        #[rs_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
         Box<dyn Add<Z, Output = X>>,
     );
 }
@@ -73,14 +73,14 @@ mod gen5 {
 mod gen6 {
     use std::ops::Add;
 
-    use ref_destruct::*;
+    use ref_split::*;
 
-    #[ref_destruct(ref(MyStructRef))]
+    #[ref_split(ref(MyStructRef))]
     struct MyStruct<'a, X, Y, Z>(
         Box<dyn for<'b> Fn(&'b X, &'a Y) -> &'b X + Send + Sync>,
-        #[rd_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
+        #[rs_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
         Box<dyn Iterator<Item = (Y, Z)> + 'a>,
-        #[rd_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
+        #[rs_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
         Box<dyn Add<Z, Output = X>>,
     );
 }

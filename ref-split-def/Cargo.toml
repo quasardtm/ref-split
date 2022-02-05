@@ -1,5 +1,5 @@
 [package]
-name = "ref-destruct-def"
+name = "ref-split-def"
 version = "0.1.0"
 edition = "2021"
 

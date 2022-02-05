@@ -1,7 +1,7 @@
 mod gen1 {
-    use ref_destruct::*;
+    use ref_split::*;
 
-    #[ref_destruct(
+    #[ref_split(
         ref(MyStructRef),
         mut(MyStructMut),
         refopt(MyStructRefopt),
@@ -13,7 +13,7 @@ mod gen1 {
     where
         for<'b> X: Fn(&'b Y) -> Option<&'b Y>,
     {
-        #[rd_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
+        #[rs_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
         x: X,
         y: &'a mut Option<Y>,
         z: for<'c> fn(&'c Z) -> Option<&'c X>,
@@ -21,9 +21,9 @@ mod gen1 {
 }
 
 mod gen2 {
-    use ref_destruct::*;
+    use ref_split::*;
 
-    #[ref_destruct(
+    #[ref_split(
         ref(MyStructRef),
         mut(MyStructMut),
         refopt(MyStructRefopt),
@@ -36,16 +36,16 @@ mod gen2 {
         for<'b> X: Fn(&'b Y) -> Option<&'b Y>,
     {
         x: X,
-        #[rd_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
+        #[rs_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
         y: &'a mut Option<Y>,
         z: for<'c> fn(&'c Z) -> Option<&'c X>,
     }
 }
 
 mod gen3 {
-    use ref_destruct::*;
+    use ref_split::*;
 
-    #[ref_destruct(
+    #[ref_split(
         ref(MyStructRef),
         mut(MyStructMut),
         refopt(MyStructRefopt),
@@ -59,15 +59,15 @@ mod gen3 {
     {
         x: X,
         y: &'a mut Option<Y>,
-        #[rd_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
+        #[rs_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
         z: for<'c> fn(&'c Z) -> Option<&'c X>,
     }
 }
 
 mod gen4 {
-    use ref_destruct::*;
+    use ref_split::*;
 
-    #[ref_destruct(
+    #[ref_split(
         ref(MyStructRef),
         mut(MyStructMut),
         refopt(MyStructRefopt),
@@ -80,9 +80,9 @@ mod gen4 {
         for<'b> X: Fn(&'b Y) -> Option<&'b Y>,
     {
         x: X,
-        #[rd_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
+        #[rs_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
         y: &'a mut Option<Y>,
-        #[rd_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
+        #[rs_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
         z: for<'c> fn(&'c Z) -> Option<&'c X>,
     }
 }

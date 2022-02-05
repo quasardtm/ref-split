@@ -1,14 +1,14 @@
 mod inner {
-    use ref_destruct::*;
+    use ref_split::*;
 
-    #[ref_destruct(ref(MyStructRef))]
+    #[ref_split(ref(MyStructRef))]
     pub(crate) struct MyStruct {
         pub(crate) x: i32,
     }
 }
 
 fn main() {
-    use ref_destruct::*;
+    use ref_split::*;
     let a = inner::MyStruct{ x: 1i32 };
-    let _b: inner::MyStructRef = (&a).destruct();
+    let _b: inner::MyStructRef = (&a).split();
 }

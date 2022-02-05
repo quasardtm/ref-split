@@ -4,8 +4,8 @@ mod attribute;
 
 /// 構造体の参照をデストラクトする構造体を定義する属性。
 /// ```rust
-/// use ref_destruct::ref_destruct;
-/// #[ref_destruct(ref(MyStructRef), mut(MyStructMut))]
+/// use ref_split::ref_split;
+/// #[ref_split(ref(MyStructRef), mut(MyStructMut))]
 /// struct MyStruct {
 ///     x: usize,
 ///     y: usize,
@@ -13,7 +13,7 @@ mod attribute;
 /// ```
 /// 上記の様に定義された場合は、以下のように展開される。
 /// ```rust
-/// use ref_destruct::ref_destruct;
+/// use ref_split::ref_split;
 /// struct MyStruct {
 ///     x: usize,
 ///     y: usize,
@@ -31,7 +31,7 @@ mod attribute;
 ///     }
 /// }
 /// 
-/// impl<'a> ::ref_destruct::RefDestruct for &'a MyStruct {
+/// impl<'a> ::ref_split::RefSplit for &'a MyStruct {
 ///     type Struct = MyStructRef<'a>;
 /// }
 /// 
@@ -50,24 +50,24 @@ mod attribute;
 ///     }
 /// }
 /// 
-/// impl<'a> ::ref_destruct::RefDestruct for &'a mut MyStruct {
+/// impl<'a> ::ref_split::RefSplit for &'a mut MyStruct {
 ///     type Struct = MyStructMut<'a>;
 /// }
 /// ```
 /// 引数`ref(StructIdent)`で、不変な参照からのFromが定義され、引数`mut(StructIdent)`で、可変な参照からのFromが定義される。
 /// 
-/// `RefDestruct`が1つしか実装できないため、`ref`,`mut`は、型一つしか指定できない。
-/// 引数`refopt(StructIdent, StructIdent2, ...)`, `refmut(StructIdent, StructIdent2, ...)`を指定すると、`RefDestruct`の実装を省略する。この場合は複数定義が可能となる。
+/// `RefSplit`が1つしか実装できないため、`ref`,`mut`は、型一つしか指定できない。
+/// 引数`refopt(StructIdent, StructIdent2, ...)`, `refmut(StructIdent, StructIdent2, ...)`を指定すると、`RefSplit`の実装を省略する。この場合は複数定義が可能となる。
 /// ```rust
-/// use ref_destruct::ref_destruct;
-/// #[ref_destruct(ref(MyStructRef), mut(MyStructMut), refopt(MyStructRefopt, MyStructRefopt2), mutopt(MyStructMutopt, MyStructMutopt2))]
+/// use ref_split::ref_split;
+/// #[ref_split(ref(MyStructRef), mut(MyStructMut), refopt(MyStructRefopt, MyStructRefopt2), mutopt(MyStructMutopt, MyStructMutopt2))]
 /// struct MyStruct {
 ///     x: usize,
 ///     y: usize,
 /// }
 /// ```
 /// 
-/// `#[ref_destruct]`への引数は省略できず、必ず`ref`か`mut`のどちらか1つが必要となる。
+/// `#[ref_split]`への引数は省略できず、必ず`ref`か`mut`のどちらか1つが必要となる。
 /// `ref`や`mut`の引数も省略できない。
 /// 
 /// # 対象アイテム
@@ -79,26 +79,26 @@ mod attribute;
 /// # 無視属性
 /// 
 /// 通常、すべてのフィールドがデストラクト用構造体に展開される。
-/// 展開したくないフィールドに対しては、`#[rd_ignore]`属性を付加する。
+/// 展開したくないフィールドに対しては、`#[rs_ignore]`属性を付加する。
 /// ```rust
-/// use ref_destruct::ref_destruct;
-/// #[ref_destruct(ref(MyStructRef), mut(MyStructMut))]
+/// use ref_split::ref_split;
+/// #[ref_split(ref(MyStructRef), mut(MyStructMut))]
 /// struct MyStruct {
 ///     x: usize,
-///     #[rd_ignore]
+///     #[rs_ignore]
 ///     y: usize,
 /// }
 /// ```
 /// 上記のようにすると、変換時に`y`は展開されない。
 /// 
-/// `ref`と`mut`で`#[rd_ignore]`を分けて設定したい場合は、`#[rd_ignore]`の引数に`ref`または`mut`を与える。
+/// `ref`と`mut`で`#[rs_ignore]`を分けて設定したい場合は、`#[rs_ignore]`の引数に`ref`または`mut`を与える。
 /// ```rust
-/// use ref_destruct::ref_destruct;
-/// #[ref_destruct(ref(MyStructRef), mut(MyStructMut))]
+/// use ref_split::ref_split;
+/// #[ref_split(ref(MyStructRef), mut(MyStructMut))]
 /// struct MyStruct {
-///     #[rd_ignore(ref)]
+///     #[rs_ignore(ref)]
 ///     x: usize,
-///     #[rd_ignore(mut)]
+///     #[rs_ignore(mut)]
 ///     y: usize,
 /// }
 /// ```
@@ -108,17 +108,17 @@ mod attribute;
 /// 以下はコンパイルエラーとなる。
 /// ```compile_fail
 /// mod inner {
-///     use ref_destruct::ref_destruct;
-///     #[ref_destruct(ref(MyStructRef), mut(MyStructMut))]
+///     use ref_split::ref_split;
+///     #[ref_split(ref(MyStructRef), mut(MyStructMut))]
 ///     struct MyStruct {
-///         #[rd_ignore(ref)]
+///         #[rs_ignore(ref)]
 ///         x: usize,
-///         #[rd_ignore(mut)]
+///         #[rs_ignore(mut)]
 ///         y: usize,
 ///     }
 /// }
 /// 
-/// use ref_destruct::ref_destruct;
+/// use ref_split::ref_split;
 /// impl inner::MyStructRef<'_> {
 ///     fn print(&self) { println!("{}", self.y) }
 /// }
@@ -132,17 +132,17 @@ mod attribute;
 /// 以下は問題なくコンパイルは通る。
 /// ```rust
 /// mod inner {
-///     use ref_destruct::ref_destruct;
-///     #[ref_destruct(ref(MyStructRef), mut(MyStructMut))]
+///     use ref_split::ref_split;
+///     #[ref_split(ref(MyStructRef), mut(MyStructMut))]
 ///     pub struct MyStruct {
-///         #[rd_ignore(ref)]
+///         #[rs_ignore(ref)]
 ///         x: usize,
-///         #[rd_ignore(mut)]
+///         #[rs_ignore(mut)]
 ///         y: usize,
 ///     }
 /// }
 /// 
-/// use ref_destruct::ref_destruct;
+/// use ref_split::ref_split;
 /// impl inner::MyStructRef<'_> {
 ///     fn print(&self) { println!("{}", self.y) }
 /// }
@@ -151,7 +151,7 @@ mod attribute;
 /// # TODO
 /// - 現在、Self型の使用が出来ないので、対応する。
 #[proc_macro_attribute]
-pub fn ref_destruct(args: TokenStream, input: TokenStream) -> TokenStream {
+pub fn ref_split(args: TokenStream, input: TokenStream) -> TokenStream {
     let args = parse_macro_input!(args as AttributeArgs);
     attribute::proc(args, input.into())
         .unwrap_or_else(|err| err.to_compile_error())

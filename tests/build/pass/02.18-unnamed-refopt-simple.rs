@@ -1,6 +1,6 @@
-use ref_destruct::*;
+use ref_split::*;
 
-#[ref_destruct(refopt(MyStructRefopt))]
+#[ref_split(refopt(MyStructRefopt))]
 struct MyStruct(i32);
 
 fn main() {}

@@ -53,7 +53,7 @@ pub(crate) fn proc(args: AttributeArgs, input: TokenStream) -> syn::Result<Token
     let mut refopt_ident: Vec<Ident> = Vec::new();
     let mut mutopt_ident: Vec<Ident> = Vec::new();
 
-    // ref_destructの引数を調べる
+    // ref_splitの引数を調べる
     // refとmutが0か1個のみok
     for nested_meta in args.iter() {
         if let NestedMeta::Meta(Meta::List(list)) = nested_meta {
@@ -94,11 +94,11 @@ pub(crate) fn proc(args: AttributeArgs, input: TokenStream) -> syn::Result<Token
     {
         return Err(syn::Error::new_spanned(
             input,
-            "ref-destruct requires at least 1 argument, ref(Ident), mut(Ident), refopt(Ident), or mutopt(Ident).",
+            "ref-split requires at least 1 argument, ref(Ident), mut(Ident), refopt(Ident), or mutopt(Ident).",
         ));
     }
 
-    // 元の構造体から#[rd_ignore]を除いたTokenStreamを、返却用のベースとして保存
+    // 元の構造体から#[rs_ignore]を除いたTokenStreamを、返却用のベースとして保存
     let mut return_stream = into_base_stream(input.clone())?;
     // refとmutに関して処理する
     let input_item: Item = syn::parse2(input)?;
@@ -133,18 +133,18 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
 
             // ジェネリクスについて整理する
             let mut ref_struct_generics = generics.clone();
-            let ref_destruct_lifetime = Lifetime::new("'ref_destruct_lifetime", Span::call_site());
+            let ref_split_lifetime = Lifetime::new("'ref_split_lifetime", Span::call_site());
             for lifetime in ref_struct_generics.lifetimes_mut() {
-                lifetime.bounds.push(ref_destruct_lifetime.clone());
+                lifetime.bounds.push(ref_split_lifetime.clone());
             }
-            let ref_destruct_ref = T::token(Some(&ref_destruct_lifetime));
-            let ref_destruct_ref_nolife = T::token(None);
-            let ref_destruct_lifetime_def = LifetimeDef::new(ref_destruct_lifetime);
+            let ref_split_ref = T::token(Some(&ref_split_lifetime));
+            let ref_split_ref_nolife = T::token(None);
+            let ref_split_lifetime_def = LifetimeDef::new(ref_split_lifetime);
 
             // ref用にはライフタイムを1つ追加する
             ref_struct_generics
                 .params
-                .push(GenericParam::Lifetime(ref_destruct_lifetime_def));
+                .push(GenericParam::Lifetime(ref_split_lifetime_def));
 
             let (_struct_generics_impl, struct_generics_type, struct_generics_where) =
                 generics.split_for_impl();
@@ -166,13 +166,13 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
 
                     for field in named.iter().filter(|field| {
                         !field.attrs.iter().any(|attr| {
-                            if !attr.path.is_ident("rd_ignore") {
-                                // rd_ignore属性がない
+                            if !attr.path.is_ident("rs_ignore") {
+                                // rs_ignore属性がない
                                 false
                             } else if let Ok(list) = attr
                                 .parse_args_with(Punctuated::<NestedMeta, Comma>::parse_terminated)
                             {
-                                // 引数付きrd_ignore属性がある
+                                // 引数付きrs_ignore属性がある
                                 list.iter().any(|meta| {
                                     match meta {
                                         NestedMeta::Meta(Meta::Path(path)) => {
@@ -197,7 +197,7 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
                                     }
                                 })
                             } else {
-                                // 引数なしrd_ignore属性がある
+                                // 引数なしrs_ignore属性がある
                                 true
                             }
                         })
@@ -210,9 +210,9 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
                             colon_token: _,
                         } = field;
                         let ident = ident.as_ref().unwrap();
-                        ref_struct_fields.push(quote! { pub #ident: #ref_destruct_ref #ty });
+                        ref_struct_fields.push(quote! { pub #ident: #ref_split_ref #ty });
                         field_to_ref_struct
-                            .push(quote! { #ident: #ref_destruct_ref_nolife v.#ident });
+                            .push(quote! { #ident: #ref_split_ref_nolife v.#ident });
 
                         if !types_remove.is_empty() || !lifetimes_remove.is_empty() {
                             search_generics_type(
@@ -230,7 +230,7 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
                     if ref_struct_fields.is_empty() {
                         return Err(syn::Error::new_spanned(
                             input_item,
-                            "ref-destruct requires at least 1 field.",
+                            "ref-split requires at least 1 field.",
                         ));
                     }
 
@@ -306,7 +306,7 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
                             Span::call_site(),
                         );
                         let name = format_ident!(
-                            "__ref_destruct_phantom_data_for_type_{}",
+                            "__ref_split_phantom_data_for_type_{}",
                             ident_token_snake
                         );
                         quote!(#name: ::core::marker::PhantomData<#ident_token>)
@@ -317,7 +317,7 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
                             Span::call_site(),
                         );
                         let name = format_ident!(
-                            "__ref_destruct_phantom_data_for_type_{}",
+                            "__ref_split_phantom_data_for_type_{}",
                             ident_token_snake
                         );
                         quote!(#name: ::core::marker::PhantomData)
@@ -328,7 +328,7 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
                             Span::call_site(),
                         );
                         let name = format_ident!(
-                            "__ref_destruct_phantom_data_for_lifetime_{}",
+                            "__ref_split_phantom_data_for_lifetime_{}",
                             ident_token_snake
                         );
                         let lifetime = Lifetime::new(
@@ -343,7 +343,7 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
                             Span::call_site(),
                         );
                         let name = format_ident!(
-                            "__ref_destruct_phantom_data_for_lifetime_{}",
+                            "__ref_split_phantom_data_for_lifetime_{}",
                             ident_token_snake
                         );
                         quote!(#name: ::core::marker::PhantomData)
@@ -362,10 +362,10 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
                             #(#ref_struct_fields),*
                         }
 
-                        impl #ref_struct_generics_trait_impl ::core::convert::From<#ref_destruct_ref #ident #struct_generics_type> for #ref_ident #ref_struct_generics_type
+                        impl #ref_struct_generics_trait_impl ::core::convert::From<#ref_split_ref #ident #struct_generics_type> for #ref_ident #ref_struct_generics_type
                         #ref_struct_generics_trait_where
                         {
-                            fn from(v: #ref_destruct_ref #ident #struct_generics_type) -> Self {
+                            fn from(v: #ref_split_ref #ident #struct_generics_type) -> Self {
                                 #ref_ident {
                                     #(#field_to_ref_struct),*
                                 }
@@ -373,11 +373,11 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
                         }
                     };
 
-                    // RefOpt, MutOptはRefDestructを実装しない
+                    // RefOpt, MutOptはRefSplitを実装しない
                     if T::IS_MAIN {
                         ref_struct_token.extend(
                             quote! {
-                                impl #ref_struct_generics_trait_impl ::ref_destruct::RefDestruct for #ref_destruct_ref #ident #struct_generics_type  #struct_generics_where {
+                                impl #ref_struct_generics_trait_impl ::ref_split::RefSplit for #ref_split_ref #ident #struct_generics_type  #struct_generics_where {
                                     type Struct = #ref_ident #ref_struct_generics_type;
                                 }
                             }
@@ -401,13 +401,13 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
 
                     for (num, field) in unnamed.iter().enumerate().filter(|(_, field)| {
                         !field.attrs.iter().any(|attr| {
-                            if !attr.path.is_ident("rd_ignore") {
-                                // rd_ignore属性がない
+                            if !attr.path.is_ident("rs_ignore") {
+                                // rs_ignore属性がない
                                 false
                             } else if let Ok(list) = attr
                                 .parse_args_with(Punctuated::<NestedMeta, Comma>::parse_terminated)
                             {
-                                // 引数付きrd_ignore属性がある
+                                // 引数付きrs_ignore属性がある
                                 list.iter().any(|meta| {
                                     match meta {
                                         NestedMeta::Meta(Meta::Path(path)) => {
@@ -432,7 +432,7 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
                                     }
                                 })
                             } else {
-                                // 引数なしrd_ignore属性がある
+                                // 引数なしrs_ignore属性がある
                                 true
                             }
                         })
@@ -445,8 +445,8 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
                             vis: _,
                             colon_token: _,
                         } = field;
-                        ref_struct_fields.push(quote! { pub #ref_destruct_ref #ty });
-                        field_to_ref_struct.push(quote! { #ref_destruct_ref_nolife v.#numidx });
+                        ref_struct_fields.push(quote! { pub #ref_split_ref #ty });
+                        field_to_ref_struct.push(quote! { #ref_split_ref_nolife v.#numidx });
 
                         if !types_remove.is_empty() || !lifetimes_remove.is_empty() {
                             search_generics_type(
@@ -464,7 +464,7 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
                     if ref_struct_fields.is_empty() {
                         return Err(syn::Error::new_spanned(
                             input_item,
-                            "ref-destruct requires at least 1 field.",
+                            "ref-split requires at least 1 field.",
                         ));
                     }
 
@@ -565,10 +565,10 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
                     let mut ref_struct_token = quote! {
                         #vis struct #ref_ident #ref_struct_generics_impl (#(#ref_struct_fields),*) #ref_struct_generics_where;
 
-                        impl #ref_struct_generics_trait_impl ::core::convert::From<#ref_destruct_ref #ident #struct_generics_type> for #ref_ident #ref_struct_generics_type
+                        impl #ref_struct_generics_trait_impl ::core::convert::From<#ref_split_ref #ident #struct_generics_type> for #ref_ident #ref_struct_generics_type
                         #ref_struct_generics_trait_where
                         {
-                            fn from(v: #ref_destruct_ref #ident #struct_generics_type) -> Self {
+                            fn from(v: #ref_split_ref #ident #struct_generics_type) -> Self {
                                 #ref_ident (
                                     #(#field_to_ref_struct),*
                                 )
@@ -576,11 +576,11 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
                         }
                     };
 
-                    // RefOpt, MutOptはRefDestructを実装しない
+                    // RefOpt, MutOptはRefSplitを実装しない
                     if T::IS_MAIN {
                         ref_struct_token.extend(
                             quote! {
-                                impl #ref_struct_generics_trait_impl ::ref_destruct::RefDestruct for #ref_destruct_ref #ident #struct_generics_type  #struct_generics_where {
+                                impl #ref_struct_generics_trait_impl ::ref_split::RefSplit for #ref_split_ref #ident #struct_generics_type  #struct_generics_where {
                                     type Struct = #ref_ident #ref_struct_generics_type;
                                 }
                             }
@@ -591,13 +591,13 @@ fn create_token_stream<T: RefMut>(ref_ident: Ident, input_item: &Item) -> syn::R
                 }
                 syn::Fields::Unit => Err(syn::Error::new_spanned(
                     input_item,
-                    "ref-destruct requires at least 1 field.",
+                    "ref-split requires at least 1 field.",
                 )),
             }
         }
         _ => Err(syn::Error::new_spanned(
             input_item,
-            "ref-destruct only supports struct.",
+            "ref-split only supports struct.",
         )),
     }
 }
@@ -608,25 +608,25 @@ fn into_base_stream(input: TokenStream) -> syn::Result<TokenStream> {
         Item::Struct(item_struct) => match &mut item_struct.fields {
             syn::Fields::Named(fields_named) => {
                 for field in fields_named.named.iter_mut() {
-                    field.attrs.retain(|attr| !attr.path.is_ident("rd_ignore"));
+                    field.attrs.retain(|attr| !attr.path.is_ident("rs_ignore"));
                 }
             }
             syn::Fields::Unnamed(field_unnamed) => {
                 for field in field_unnamed.unnamed.iter_mut() {
-                    field.attrs.retain(|attr| !attr.path.is_ident("rd_ignore"));
+                    field.attrs.retain(|attr| !attr.path.is_ident("rs_ignore"));
                 }
             }
             syn::Fields::Unit => {
                 return Err(syn::Error::new_spanned(
                     input_item,
-                    "ref-destruct requires at least 1 field.",
+                    "ref-split requires at least 1 field.",
                 ))
             }
         },
         _ => {
             return Err(syn::Error::new_spanned(
                 input_item,
-                "ref-destruct only supports struct.",
+                "ref-split only supports struct.",
             ))
         }
     };

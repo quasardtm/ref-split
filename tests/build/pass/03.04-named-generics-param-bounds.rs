@@ -1,7 +1,7 @@
 mod gen1 {
-    use ref_destruct::*;
+    use ref_split::*;
 
-    #[ref_destruct(
+    #[ref_split(
         ref(MyStructRef),
         mut(MyStructMut),
         refopt(MyStructRefopt),
@@ -18,16 +18,16 @@ mod gen1 {
         Z: std::ops::Add<X, Output = Y> + ?Sized,
     > {
         x: X,
-        #[rd_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
+        #[rs_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
         y: &'a mut Option<&'b Y>,
-        #[rd_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
+        #[rs_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
         z: &'c Z,
     }
 }
 mod gen2 {
-    use ref_destruct::*;
+    use ref_split::*;
 
-    #[ref_destruct(
+    #[ref_split(
         ref(MyStructRef),
         mut(MyStructMut),
         refopt(MyStructRefopt),
@@ -45,14 +45,14 @@ mod gen2 {
     > {
         x: X,
         y: &'a mut Option<&'b Y>,
-        #[rd_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
+        #[rs_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
         z: &'c Z,
     }
 }
 mod gen3 {
-    use ref_destruct::*;
+    use ref_split::*;
 
-    #[ref_destruct(
+    #[ref_split(
         ref(MyStructRef),
         mut(MyStructMut),
         refopt(MyStructRefopt),
@@ -69,7 +69,7 @@ mod gen3 {
         Z: std::ops::Add<X, Output = Y> + ?Sized,
     > {
         x: X,
-        #[rd_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
+        #[rs_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
         y: &'a mut Option<&'b Y>,
         z: &'c Z,
     }

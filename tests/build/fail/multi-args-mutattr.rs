@@ -1,6 +1,6 @@
-use ref_destruct::*;
+use ref_split::*;
 
-#[ref_destruct(mut(MyStructMut), mut(MyStructMutDup))]
+#[ref_split(mut(MyStructMut), mut(MyStructMutDup))]
 struct MyStruct {
     x: i32,
 }

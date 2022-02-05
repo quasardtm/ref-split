@@ -1,5 +1,5 @@
 [package]
-name = "ref-destruct-macro"
+name = "ref-split-macro"
 version = "0.1.0"
 edition = "2021"
 
@@ -13,7 +13,7 @@ syn = { version = "1", features = ["full", "extra-traits"] }
 proc-macro2 = "1"
 quote = "1"
 convert_case = "0.5"
-ref-destruct-def = { path = "../ref-destruct-def" }
+ref-split-def = { path = "../ref-split-def" }
 
 [dev-dependencies]
-ref-destruct = { path = ".." }
+ref-split = { path = ".." }

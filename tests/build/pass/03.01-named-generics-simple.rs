@@ -1,7 +1,7 @@
 mod gen1 {
-    use ref_destruct::*;
+    use ref_split::*;
 
-    #[ref_destruct(
+    #[ref_split(
         ref(MyStructRef),
         mut(MyStructMut),
         refopt(MyStructRefopt),
@@ -11,15 +11,15 @@ mod gen1 {
     )]
     struct MyStruct<X, Y, Z> {
         x: X,
-        #[rd_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
+        #[rs_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
         y: Y,
         z: Z,
     }
 }
 mod gen2 {
-    use ref_destruct::*;
+    use ref_split::*;
 
-    #[ref_destruct(
+    #[ref_split(
         ref(MyStructRef),
         mut(MyStructMut),
         refopt(MyStructRefopt),
@@ -29,9 +29,9 @@ mod gen2 {
     )]
     struct MyStruct<X, Y, Z> {
         x: X,
-        #[rd_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
+        #[rs_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
         y: Y,
-        #[rd_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
+        #[rs_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
         z: Z,
     }
 }

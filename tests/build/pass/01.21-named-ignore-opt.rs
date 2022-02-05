@@ -1,32 +1,32 @@
 mod refopt {
-    use ref_destruct::*;
+    use ref_split::*;
 
-    #[ref_destruct(ref(MyStructRef), mut(MyStructMut), refopt(MyStructRefopt), mutopt(MyStructMutopt), refopt(MyStructRefoptEx), mutopt(MyStructMutoptEx))]
+    #[ref_split(ref(MyStructRef), mut(MyStructMut), refopt(MyStructRefopt), mutopt(MyStructMutopt), refopt(MyStructRefoptEx), mutopt(MyStructMutoptEx))]
     struct MyStruct {
         x: i32,
-        #[rd_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
+        #[rs_ignore(ref, mut, refopt(MyStructRefopt, MyStructRefoptEx))]
         y: u32,
     }
 }
 
 mod mutopt {
-    use ref_destruct::*;
+    use ref_split::*;
 
-    #[ref_destruct(ref(MyStructRef), mut(MyStructMut), refopt(MyStructRefopt), mutopt(MyStructMutopt), refopt(MyStructRefoptEx), mutopt(MyStructMutoptEx))]
+    #[ref_split(ref(MyStructRef), mut(MyStructMut), refopt(MyStructRefopt), mutopt(MyStructMutopt), refopt(MyStructRefoptEx), mutopt(MyStructMutoptEx))]
     struct MyStruct {
         x: i32,
-        #[rd_ignore(ref, mut, mutopt(MyStructMutopt, MyStructMutoptEx))]
+        #[rs_ignore(ref, mut, mutopt(MyStructMutopt, MyStructMutoptEx))]
         y: u32,
     }
 }
 
 mod refmutopt {
-    use ref_destruct::*;
+    use ref_split::*;
     
-    #[ref_destruct(ref(MyStructRef), mut(MyStructMut), refopt(MyStructRefopt), mutopt(MyStructMutopt), refopt(MyStructRefoptEx), mutopt(MyStructMutoptEx))]
+    #[ref_split(ref(MyStructRef), mut(MyStructMut), refopt(MyStructRefopt), mutopt(MyStructMutopt), refopt(MyStructRefoptEx), mutopt(MyStructMutoptEx))]
     struct MyStruct {
         x: i32,
-        #[rd_ignore(ref, mut, mutopt(MyStructMutopt, MyStructMutoptEx), mutopt(MyStructMutopt, MyStructMutoptEx))]
+        #[rs_ignore(ref, mut, mutopt(MyStructMutopt, MyStructMutoptEx), mutopt(MyStructMutopt, MyStructMutoptEx))]
         y: u32,
     }
 }

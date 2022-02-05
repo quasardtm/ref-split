@@ -1,6 +1,6 @@
-use ref_destruct::*;
+use ref_split::*;
 
-#[ref_destruct(ref(MyStructRef))]
-struct MyStruct(i32, #[rd_ignore(mut)] u64);
+#[ref_split(ref(MyStructRef))]
+struct MyStruct(i32, #[rs_ignore(mut)] u64);
 
 fn main() {}

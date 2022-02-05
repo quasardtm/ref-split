@@ -1,6 +1,6 @@
-use ref_destruct::*;
+use ref_split::*;
 
-#[ref_destruct(ref(MyStructRef))]
+#[ref_split(ref(MyStructRef))]
 struct MyStruct<'a> {
     x: &'a i32,
 }
